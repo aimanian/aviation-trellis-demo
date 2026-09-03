@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trellis · Aviation — Live API Explorer</title>
+<style>
+  :root{
+    --bg:#0a1224; --bg-card:#16244a; --border:#243a64;
+    --text:#e9eef5; --mut:#9eb0c8;
+    --accent:#4cc9f0; --accent-2:#f72585; --accent-3:#ffb703; --good:#6ad88a; --bad:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.55 -apple-system,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px;margin:0 auto;padding:26px 20px 70px}
+  a{color:var(--accent)}
+  .mono{font-family:'SF Mono',Consolas,monospace}
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:6px}
+  h1{font-size:24px;margin:0;letter-spacing:-.01em}
+  h1 .wm{background:linear-gradient(90deg,var(--accent),var(--good));-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:800}
+  .tag{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+  .sub{color:var(--mut);font-size:14px;margin:2px 0 18px}
+  /* connection bar */
+  .conn{display:flex;align-items:center;gap:10px;background:var(--bg-card);border:1px solid var(--border);
+    border-radius:10px;padding:10px 14px;margin-bottom:18px;flex-wrap:wrap}
+  .conn label{font-size:12px;color:var(--mut);white-space:nowrap}
+  .conn input{flex:1;min-width:200px;background:var(--bg);border:1px solid var(--border);border-radius:7px;
+    color:var(--text);padding:8px 10px;font:inherit}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--mut);flex:0 0 auto}
+  .dot.ok{background:var(--good);box-shadow:0 0 8px var(--good)}
+  .dot.bad{background:var(--bad)}
+  .conn .st{font-size:12px;color:var(--mut);white-space:nowrap}
+  /* tabs */
+  .tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+  .tab{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:8px 16px;
+    color:var(--mut);cursor:pointer;font-weight:600;font-size:14px}
+  .tab.active{color:var(--text);border-color:var(--accent);background:rgba(76,201,240,0.08)}
+  .panel{display:none} .panel.active{display:block}
+  /* shared controls */
+  textarea,select{background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);
+    padding:10px 12px;font:inherit;width:100%;resize:vertical}
+  textarea{min-height:64px}
+  .row{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  .btn{background:var(--accent);color:#04121b;border:none;border-radius:8px;padding:10px 20px;font-weight:700;
+    font-size:14px;cursor:pointer}
+  .btn:hover{filter:brightness(1.08)}
+  .btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--border)}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+  .chip{background:rgba(76,201,240,0.1);color:var(--accent);border:1px solid var(--border);border-radius:999px;
+    padding:7px 13px;font-size:12.5px;cursor:pointer}
+  .chip:hover{filter:brightness(1.1)}
+  /* results */
+  .entry{border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:14px;background:var(--bg-card)}
+  .entry .q{font-weight:700;margin-bottom:8px}
+  .entry .q:before{content:'You asked';display:block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:3px}
+  .bubble{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;line-height:1.6}
+  .thinking{color:var(--mut)}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px;display:block;overflow-x:auto}
+  th,td{border:1px solid var(--border);padding:6px 10px;text-align:left;white-space:nowrap}
+  th{background:rgba(76,201,240,0.08);color:var(--accent)}
+  .card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px}
+  .card .n{font-weight:700}.card .p{color:var(--mut);font-size:12.5px;margin-top:3px}
+  .err{color:var(--bad);font-size:13px;margin-top:8px}
+  footer{margin-top:40px;color:var(--mut);font-size:12px;border-top:1px solid var(--border);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <span class="tag">Live API Explorer</span>
+      <h1><span class="wm">Trellis</span> · Aviation</h1>
+    </div>
+  </header>
+  <p class="sub">A browser front-end that talks to the aviation trellis over its REST API — ask questions in plain language, run graph queries, and inspect the ontology. Every answer comes back with its evidence.</p>
+
+  <div class="conn">
+    <span class="dot" id="dot"></span>
+    <label>API&nbsp;base</label>
+    <input id="apibase" spellcheck="false" placeholder="https://api.aerospacesense.org">
+    <button class="btn ghost" onclick="checkHealth()">Connect</button>
+    <span class="st" id="status">not connected</span>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-p="ask" onclick="tab('ask')">💬 Ask</div>
+    <div class="tab" data-p="query" onclick="tab('query')">🔎 Query</div>
+    <div class="tab" data-p="onto" onclick="tab('onto')">🕸 Ontology</div>
+  </div>
+
+  <!-- ASK -->
+  <div class="panel active" id="p-ask">
+    <div class="chips" id="askchips"></div>
+    <textarea id="q" placeholder="Ask about flights, NOTAMs, weather, traffic-flow programs…"></textarea>
+    <div class="row">
+      <select id="model" style="max-width:230px">
+        <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+        <option value="claude-opus-4-7">claude-opus-4-7</option>
+        <option value="claude-haiku-4-5-20251001">claude-haiku-4-5</option>
+      </select>
+      <button class="btn" onclick="ask()">Ask</button>
+    </div>
+    <div id="answers"></div>
+  </div>
+
+  <!-- QUERY -->
+  <div class="panel" id="p-query">
+    <p class="sub" style="margin-top:0">Read-only. SQL runs on per-type tables like <span class="mono">n_Flight</span>, <span class="mono">n_Notam</span>. Cypher walks the graph (rel tables are namespaced <span class="mono">EDGE__From__To</span>).</p>
+    <div class="chips">
+      <span class="chip" onclick="setSql('SELECT COUNT(*) AS flights FROM n_Flight')">count flights</span>
+      <span class="chip" onclick="setSql('SELECT callsign, max_altitude_m FROM n_Flight ORDER BY CAST(max_altitude_m AS DOUBLE) DESC NULLS LAST LIMIT 10')">highest-altitude flights</span>
+      <span class="chip" onclick="setSql('SELECT notam_type, COUNT(*) c FROM n_Notam GROUP BY 1 ORDER BY c DESC')">NOTAMs by type</span>
+    </div>
+    <textarea id="sql" class="mono">SELECT COUNT(*) AS flights FROM n_Flight</textarea>
+    <div class="row"><button class="btn" onclick="runQuery('sql')">Run SQL</button></div>
+    <div class="chips" style="margin-top:18px">
+      <span class="chip" onclick="setCy('MATCH (f:Flight)-[:FLIGHT_INTERSECTED_NOTAM__Flight__Notam]->(n:Notam) RETURN f.callsign, n.notam_id LIMIT 10')">flights that hit a NOTAM</span>
+      <span class="chip" onclick="setCy('CALL show_tables() RETURN name')">list graph tables</span>
+    </div>
+    <textarea id="cypher" class="mono">MATCH (f:Flight)-[:FLIGHT_INTERSECTED_NOTAM__Flight__Notam]->(n:Notam) RETURN f.callsign, n.notam_id LIMIT 10</textarea>
+    <div class="row"><button class="btn" onclick="runQuery('cypher')">Run Cypher</button></div>
+    <div id="qout"></div>
+  </div>
+
+  <!-- ONTOLOGY -->
+  <div class="panel" id="p-onto">
+    <div class="row" style="margin-top:0"><button class="btn ghost" onclick="loadOntology()">Load ontology</button></div>
+    <div id="ontoout"></div>
+  </div>
+
+  <footer>
+    Trellis Aviation · front-end talking to the trellis REST API (<span class="mono" id="fbase">—</span>).
+    The page is static; the reasoning runs behind the API. Set the API base above to a public URL to share.
+  </footer>
+</div>
+
+<script>
+const ASK_PROMPTS = [
+  "Which 3 operators have the most flights?",
+  "How many flights intersected a NOTAM, and name a few callsigns.",
+  "Are any airports currently IFR or LIFR? List them.",
+  "Which flights had a rapid descent?",
+  "Summarize what data this aviation trellis contains.",
+];
+const $ = id => document.getElementById(id);
+function base(){ return $('apibase').value.replace(/\/+$/,''); }
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
+// remember the API base across reloads
+$('apibase').value = localStorage.getItem('trellis_api') || 'https://api.aerospacesense.org';
+$('apibase').addEventListener('change', ()=>{ localStorage.setItem('trellis_api', base()); $('fbase').textContent=base(); });
+$('fbase').textContent = base();
+
+function tab(p){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.p===p));
+  document.querySelectorAll('.panel').forEach(pl=>pl.classList.toggle('active',pl.id==='p-'+p));
+}
+
+async function checkHealth(){
+  localStorage.setItem('trellis_api', base()); $('fbase').textContent=base();
+  $('status').textContent='connecting…'; $('dot').className='dot';
+  try{
+    const r = await fetch(base()+'/health'); const d = await r.json();
+    $('dot').className='dot ok'; $('status').textContent = 'connected · trellis: '+d.trellis+' · v'+d.version;
+  }catch(e){
+    $('dot').className='dot bad';
+    $('status').textContent = 'cannot reach API — is it running? (CORTEX=aviation … serve_api.py)';
+  }
+}
+
+// ---- Ask ----
+$('askchips').innerHTML = ASK_PROMPTS.map(p=>`<span class="chip" onclick="setQ(this.textContent)">${esc(p)}</span>`).join('');
+function setQ(t){ $('q').value=t; ask(); }
+async function ask(){
+  const q = $('q').value.trim(); if(!q) return;
+  const entry = document.createElement('div'); entry.className='entry';
+  entry.innerHTML = `<div class="q">${esc(q)}</div><div class="a"><div class="bubble thinking">Thinking…</div></div>`;
+  $('answers').insertBefore(entry, $('answers').firstChild);
+  $('q').value='';
+  try{
+    const r = await fetch(base()+'/ask',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({question:q, model:$('model').value})});
+    const d = await r.json();
+    const txt = d.answer || d.error || 'No answer';
+    let html = `<div class="bubble">${esc(txt).replace(/\n/g,'<br>')}</div>`;
+    if(d.steps && d.steps.length) html += `<div class="p" style="color:var(--mut);font-size:12px;margin-top:6px">${d.steps.length} tool call(s) · ${d.turns||'?'} turns</div>`;
+    entry.querySelector('.a').innerHTML = html;
+  }catch(e){ entry.querySelector('.a').innerHTML = `<div class="err">Request failed: ${esc(''+e)} — check the API base &amp; that the server is running.</div>`; }
+}
+
+// ---- Query ----
+function setSql(s){ $('sql').value=s; } function setCy(s){ $('cypher').value=s; }
+async function runQuery(kind){
+  const q = $(kind).value.trim(); if(!q) return;
+  $('qout').innerHTML = '<div class="bubble thinking">Running…</div>';
+  try{
+    const r = await fetch(base()+'/'+kind,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({query:q})});
+    const d = await r.json();
+    if(d.error){ $('qout').innerHTML = `<div class="err">${esc(d.error)}</div>`; return; }
+    $('qout').innerHTML = renderRows(d);
+  }catch(e){ $('qout').innerHTML = `<div class="err">Request failed: ${esc(''+e)}</div>`; }
+}
+function renderRows(d){
+  // /sql returns {columns, rows:[[...]]}; /cypher returns {rows:[{...}], row_count}
+  let cols=[], rows=[];
+  if(d.columns){ cols=d.columns; rows=d.rows||[]; }
+  else if(Array.isArray(d.rows) && d.rows.length && typeof d.rows[0]==='object'){
+    cols=Object.keys(d.rows[0]); rows=d.rows.map(o=>cols.map(c=>o[c]));
+  } else { return `<pre class="bubble mono">${esc(JSON.stringify(d,null,2))}</pre>`; }
+  if(!rows.length) return '<div class="bubble">0 rows.</div>';
+  const th = cols.map(c=>`<th>${esc(''+c)}</th>`).join('');
+  const tr = rows.map(r=>`<tr>${r.map(v=>`<td>${esc(v===null?'':''+v)}</td>`).join('')}</tr>`).join('');
+  return `<table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>
+    <div class="p" style="margin-top:6px">${rows.length} row(s)${d.shown&&d.row_count&&d.row_count>d.shown?` (showing ${d.shown} of ${d.row_count})`:''}</div>`;
+}
+
+// ---- Ontology ----
+async function loadOntology(){
+  $('ontoout').innerHTML='<div class="bubble thinking">Loading…</div>';
+  try{
+    const r = await fetch(base()+'/ontology'); const d = await r.json();
+    const nodes = (d.nodes||[]).map(n=>`<div class="card"><div class="n">${esc(n.name)} <span class="p" style="display:inline">· ${Object.keys(n.properties||{}).length} props</span></div><div class="p">${esc(n.description||'')}</div></div>`).join('');
+    const edges = (d.edges||[]).map(e=>`<div class="card"><div class="n mono">${esc(e.from)} —[${esc(e.name)}]→ ${esc(e.to)}</div><div class="p">${esc(e.description||'')}</div></div>`).join('');
+    $('ontoout').innerHTML = `<h3 style="color:var(--accent-3)">Node types (${(d.nodes||[]).length})</h3>${nodes}<h3 style="color:var(--accent-3)">Edge types (${(d.edges||[]).length})</h3>${edges}`;
+  }catch(e){ $('ontoout').innerHTML=`<div class="err">Request failed: ${esc(''+e)}</div>`; }
+}
+
+checkHealth();
+</script>
+</body>
+</html>
