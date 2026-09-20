@@ -79,6 +79,8 @@
     <span class="dot" id="dot"></span>
     <label>API&nbsp;base</label>
     <input id="apibase" spellcheck="false" placeholder="https://api.trellis-intelligence.com">
+    <label>Access&nbsp;key</label>
+    <input id="apikey" type="password" spellcheck="false" autocomplete="off" placeholder="paste the key you were given">
     <button class="btn ghost" onclick="checkHealth()">Connect</button>
     <span class="st" id="status">not connected</span>
   </div>
@@ -154,6 +156,24 @@ const DEFAULT_API = 'https://api.trellis-intelligence.com';
 let savedApi = localStorage.getItem('trellis_api');
 if (savedApi && /aerospacesense\.org/.test(savedApi)) { localStorage.removeItem('trellis_api'); savedApi = null; }
 $('apibase').value = savedApi || DEFAULT_API;
+$('apikey').value = localStorage.getItem('trellis_api_key') || '';
+$('apikey').addEventListener('change', ()=>{ localStorage.setItem('trellis_api_key', $('apikey').value.trim()); });
+
+// The API requires an X-API-Key header on everything except / and /health.
+// Attaching it in one place keeps every call consistent.
+function apiFetch(path, opts){
+  opts = Object.assign({}, opts||{});
+  const h = Object.assign({}, opts.headers||{});
+  const k = ($('apikey').value||'').trim();
+  if(k) h['X-API-Key'] = k;
+  opts.headers = h;
+  return fetch(base()+path, opts);
+}
+function authMsg(r){
+  return r.status===401
+    ? 'Unauthorized (401) — this API needs an access key. Paste it in the Access key box above and press Connect.'
+    : null;
+}
 $('apibase').addEventListener('change', ()=>{ localStorage.setItem('trellis_api', base()); $('fbase').textContent=base(); });
 $('fbase').textContent = base();
 
@@ -164,9 +184,18 @@ function tab(p){
 
 async function checkHealth(){
   localStorage.setItem('trellis_api', base()); $('fbase').textContent=base();
+  localStorage.setItem('trellis_api_key', ($('apikey').value||'').trim());
   $('status').textContent='connecting…'; $('dot').className='dot';
   try{
-    const r = await fetch(base()+'/health'); const d = await r.json();
+    const r = await apiFetch('/health'); const d = await r.json();
+    // /health is open, so reaching it proves nothing about the key. Probe a
+    // gated endpoint too, or a wrong key would look like a successful connect.
+    const probe = await apiFetch('/ontology');
+    if(probe.status === 401){
+      $('dot').className='dot bad';
+      $('status').textContent = 'reached the API, but the access key is missing or wrong';
+      return;
+    }
     $('dot').className='dot ok'; $('status').textContent = 'connected · trellis: '+d.trellis+' · v'+d.version;
   }catch(e){
     $('dot').className='dot bad';
@@ -184,10 +213,10 @@ async function ask(){
   $('answers').insertBefore(entry, $('answers').firstChild);
   $('q').value='';
   try{
-    const r = await fetch(base()+'/ask',{method:'POST',headers:{'Content-Type':'application/json'},
+    const r = await apiFetch('/ask',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({question:q, model:$('model').value})});
-    const d = await r.json();
-    const txt = d.answer || d.error || 'No answer';
+    const d = await r.json().catch(()=>({}));
+    const txt = authMsg(r) || d.answer || d.error || 'No answer';
     let html = `<div class="bubble">${esc(txt).replace(/\n/g,'<br>')}</div>`;
     if(d.steps && d.steps.length) html += `<div class="p" style="color:var(--mut);font-size:12px;margin-top:6px">${d.steps.length} tool call(s) · ${d.turns||'?'} turns</div>`;
     entry.querySelector('.a').innerHTML = html;
@@ -200,9 +229,11 @@ async function runQuery(kind){
   const q = $(kind).value.trim(); if(!q) return;
   $('qout').innerHTML = '<div class="bubble thinking">Running…</div>';
   try{
-    const r = await fetch(base()+'/'+kind,{method:'POST',headers:{'Content-Type':'application/json'},
+    const r = await apiFetch('/'+kind,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({query:q})});
-    const d = await r.json();
+    const d = await r.json().catch(()=>({}));
+    const unauth = authMsg(r);
+    if(unauth){ $('qout').innerHTML = `<div class="err">${esc(unauth)}</div>`; return; }
     if(d.error){ $('qout').innerHTML = `<div class="err">${esc(d.error)}</div>`; return; }
     $('qout').innerHTML = renderRows(d);
   }catch(e){ $('qout').innerHTML = `<div class="err">Request failed: ${esc(''+e)}</div>`; }
@@ -225,7 +256,10 @@ function renderRows(d){
 async function loadOntology(){
   $('ontoout').innerHTML='<div class="bubble thinking">Loading…</div>';
   try{
-    const r = await fetch(base()+'/ontology'); const d = await r.json();
+    const r = await apiFetch('/ontology');
+    const unauth = authMsg(r);
+    if(unauth){ $('ontoout').innerHTML = `<div class="err">${esc(unauth)}</div>`; return; }
+    const d = await r.json();
     const nodes = (d.nodes||[]).map(n=>`<div class="card"><div class="n">${esc(n.name)} <span class="p" style="display:inline">· ${Object.keys(n.properties||{}).length} props</span></div><div class="p">${esc(n.description||'')}</div></div>`).join('');
     const edges = (d.edges||[]).map(e=>`<div class="card"><div class="n mono">${esc(e.from)} —[${esc(e.name)}]→ ${esc(e.to)}</div><div class="p">${esc(e.description||'')}</div></div>`).join('');
     $('ontoout').innerHTML = `<h3 style="color:var(--accent-3)">Node types (${(d.nodes||[]).length})</h3>${nodes}<h3 style="color:var(--accent-3)">Edge types (${(d.edges||[]).length})</h3>${edges}`;
