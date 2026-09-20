@@ -78,7 +78,7 @@
   <div class="conn">
     <span class="dot" id="dot"></span>
     <label>API&nbsp;base</label>
-    <input id="apibase" spellcheck="false" placeholder="https://api.aerospacesense.org">
+    <input id="apibase" spellcheck="false" placeholder="https://api.trellis-intelligence.com">
     <button class="btn ghost" onclick="checkHealth()">Connect</button>
     <span class="st" id="status">not connected</span>
   </div>
@@ -148,7 +148,12 @@ function base(){ return $('apibase').value.replace(/\/+$/,''); }
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 
 // remember the API base across reloads
-$('apibase').value = localStorage.getItem('trellis_api') || 'https://api.aerospacesense.org';
+const DEFAULT_API = 'https://api.trellis-intelligence.com';
+// Returning visitors may have the retired aerospacesense.org host saved; drop it
+// so they land on the live API instead of a dead one.
+let savedApi = localStorage.getItem('trellis_api');
+if (savedApi && /aerospacesense\.org/.test(savedApi)) { localStorage.removeItem('trellis_api'); savedApi = null; }
+$('apibase').value = savedApi || DEFAULT_API;
 $('apibase').addEventListener('change', ()=>{ localStorage.setItem('trellis_api', base()); $('fbase').textContent=base(); });
 $('fbase').textContent = base();
 
